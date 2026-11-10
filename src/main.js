@@ -247,6 +247,10 @@ function fitCamera() {
   dirty = true;
 }
 window.addEventListener('resize', fitCamera);
+// iOS kann den WebGL-Kontext im Hintergrund verwerfen: beim Zurückkommen neu zeichnen
+canvas.addEventListener('webglcontextlost', e => e.preventDefault());
+canvas.addEventListener('webglcontextrestored', () => { dirty = true; });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { dirty = true; letzte = performance.now(); } });
 window.addEventListener('orientationchange', () => setTimeout(fitCamera, 120));
 
 // ---------- Seilgeometrie ----------
