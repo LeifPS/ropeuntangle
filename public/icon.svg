@@ -1,1 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="110" fill="#f3e6e0"/><circle cx="130" cy="140" r="54" fill="#e8322e" stroke="#141217" stroke-width="12"/><circle cx="382" cy="372" r="54" fill="#e8322e" stroke="#141217" stroke-width="12"/><path d="M130 140 C250 150 260 360 382 372" stroke="#141217" stroke-width="46" fill="none" stroke-linecap="round"/><path d="M130 140 C250 150 260 360 382 372" stroke="#e8322e" stroke-width="30" fill="none" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f68c4"/><stop offset="1" stop-color="#233b82"/></linearGradient>
+    <pattern id="rot" width="26" height="26" patternUnits="userSpaceOnUse" patternTransform="rotate(32)"><rect width="26" height="26" fill="#e8322e"/><rect width="11" height="26" fill="#b81f1c"/></pattern>
+    <pattern id="gelb" width="26" height="26" patternUnits="userSpaceOnUse" patternTransform="rotate(-32)"><rect width="26" height="26" fill="#f7b928"/><rect width="11" height="26" fill="#d4900f"/></pattern>
+    <radialGradient id="knauf" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".85"/><stop offset=".25" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <filter id="schatten" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="9"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="236" fill="#f3e6e0"/>
+  <!-- rotes Seil (unten) -->
+  <path d="M136 146 C230 160 282 352 380 372" fill="none" stroke="#000" stroke-opacity=".28" stroke-width="48" stroke-linecap="round" filter="url(#schatten)" transform="translate(8 14)"/>
+  <path d="M136 146 C230 160 282 352 380 372" fill="none" stroke="#141217" stroke-width="58" stroke-linecap="round"/>
+  <path d="M136 146 C230 160 282 352 380 372" fill="none" stroke="url(#rot)" stroke-width="42" stroke-linecap="round"/>
+  <!-- gelbes Seil (oben) -->
+  <path d="M136 372 C230 358 282 160 380 146" fill="none" stroke="#000" stroke-opacity=".28" stroke-width="48" stroke-linecap="round" filter="url(#schatten)" transform="translate(8 14)"/>
+  <path d="M136 372 C230 358 282 160 380 146" fill="none" stroke="#141217" stroke-width="58" stroke-linecap="round"/>
+  <path d="M136 372 C230 358 282 160 380 146" fill="none" stroke="url(#gelb)" stroke-width="42" stroke-linecap="round"/>
+  <!-- Pflöcke -->
+  <g id="p">
+    <circle cx="136" cy="146" r="62" fill="#141217"/><circle cx="136" cy="146" r="54" fill="#e8322e"/><circle cx="136" cy="146" r="40" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width="7"/>
+    <circle cx="136" cy="146" r="30" fill="#e8322e"/><circle cx="136" cy="146" r="30" fill="url(#knauf)"/>
+  </g>
+  <g>
+    <circle cx="380" cy="372" r="62" fill="#141217"/><circle cx="380" cy="372" r="54" fill="#e8322e"/><circle cx="380" cy="372" r="40" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width="7"/>
+    <circle cx="380" cy="372" r="30" fill="#e8322e"/><circle cx="380" cy="372" r="30" fill="url(#knauf)"/>
+  </g>
+  <g>
+    <circle cx="136" cy="372" r="62" fill="#141217"/><circle cx="136" cy="372" r="54" fill="#f7b928"/><circle cx="136" cy="372" r="40" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width="7"/>
+    <circle cx="136" cy="372" r="30" fill="#f7b928"/><circle cx="136" cy="372" r="30" fill="url(#knauf)"/>
+  </g>
+  <g>
+    <circle cx="380" cy="146" r="62" fill="#141217"/><circle cx="380" cy="146" r="54" fill="#f7b928"/><circle cx="380" cy="146" r="40" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width="7"/>
+    <circle cx="380" cy="146" r="30" fill="#f7b928"/><circle cx="380" cy="146" r="30" fill="url(#knauf)"/>
+  </g>
+</svg>
