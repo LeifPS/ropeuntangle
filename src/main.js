@@ -5,7 +5,7 @@ import {
   CanvasTexture, RepeatWrapping, PCFSoftShadowMap, BufferGeometry, BufferAttribute, SRGBColorSpace,
 } from 'three';
 import { levelFuer, PALETTE, FEST_ANZAHL } from './levels.js';
-import { kreuzungen, reichtBis, gedeckteListe, segHit } from './logic.js';
+import { kreuzungen, reichtBis } from './logic.js';
 import { Ton } from './ton.js';
 
 // ---------- Maße (1 Einheit = Abstand zweier Pflöcke) ----------
@@ -145,35 +145,8 @@ function aufraeumen() {
   scene.add(gfx);
 }
 
-const GRAU = new Color(0x5d5666);
 function statischeReihenfolge() { return ropes.map((_, k) => k).sort((x, y) => lv.schicht[x] - lv.schicht[y]); }
 function logik() { return ropes.map(r => ({ a: r.ends[0].slot, b: r.ends[1].slot })); }
-// Welche Seile sind gesperrt (liegen unter einem anderen)? Gesperrte Pflöcke werden abgedunkelt.
-function sperrenNeu() {
-  const g = gedeckteListe(lv.cols, logik(), lv.schicht);
-  ropes.forEach((r, k) => {
-    r.gedeckt = g[k];
-    for (const e of r.ends) {
-      const m = e.peg.userData.mats; if (!m) continue;
-      for (const [c, orig] of m) c.copy(orig).lerp(GRAU, g[k] ? 0.5 : 0);
-    }
-  });
-  dirty = true;
-}
-function ueberDecker(k) {   // Seile, die auf Seil k liegen
-  const l = logik(), a = l[k], cols = lv.cols, out = [];
-  for (let j = 0; j < l.length; j++) {
-    if (j === k || lv.schicht[j] <= lv.schicht[k]) continue;
-    const q = l[j];
-    if (segHit(a.a % cols, (a.a / cols) | 0, a.b % cols, (a.b / cols) | 0, q.a % cols, (q.a / cols) | 0, q.b % cols, (q.b / cols) | 0)) out.push(j);
-  }
-  return out;
-}
-let meldungTimer = 0;
-function meldung(text) {
-  const m = $('meldung'); m.textContent = text; m.hidden = false;
-  clearTimeout(meldungTimer); meldungTimer = setTimeout(() => { m.hidden = true; }, 2600);
-}
 
 function laden(n) {
   num = n;
@@ -233,8 +206,6 @@ function laden(n) {
   order = statischeReihenfolge();
   rueck = []; zuege = 0; gewonnen = false; drag = null;
   siegBox.hidden = true;
-  $('meldung').hidden = true;
-  sperrenNeu();
   fitCamera();
   baueSeile();
   ui();
@@ -246,7 +217,6 @@ function setzeAufStart() {
   order = statischeReihenfolge();
   rueck = []; zuege = 0; gewonnen = false; drag = null;
   siegBox.hidden = true;
-  sperrenNeu();
   ui(); dirty = true;
 }
 
@@ -418,14 +388,6 @@ canvas.addEventListener('pointerdown', ev => {
   }
   if (!best) return;
   ev.preventDefault();
-  if (best.rope.gedeckt) {   // Seil liegt unter einem anderen: erst das obere bewegen
-    for (const e of best.rope.ends) e.shake = 0.4;
-    for (const j of ueberDecker(best.rope.k)) for (const e of ropes[j].ends) e.scale = 1.28;
-    ton.nein();
-    meldung('Dieses Seil liegt unter einem anderen. Bewege zuerst das obere Seil.');
-    dirty = true;
-    return;
-  }
   try { canvas.setPointerCapture(ev.pointerId); } catch (err) { }
   const touch = ev.pointerType === 'touch' || ev.pointerType === 'pen';
   drag = { rope: best.rope, e: best.e, id: ev.pointerId, von: best.e.slot, ziel: best.e.slot, off: touch ? -0.62 : 0, grab: { x: best.e.px - p.x, z: best.e.pz - p.z } };
@@ -437,8 +399,7 @@ canvas.addEventListener('pointerdown', ev => {
     rg.position.x = q.x; rg.position.z = q.z; rg.scale.setScalar(best.rope.max); rg.visible = true;
     drag.mitte = { x: q.x, z: q.z };
   }
-  // Seil kommt nach oben
-  order = order.filter(k => k !== best.rope.k); order.push(best.rope.k);
+  // Das Seil behält seine Lage: Liegt es unter anderen, bleibt es beim Ziehen darunter (nur das Ende hebt sich)
   ton.nimm();
   dirty = true;
 });
@@ -472,7 +433,6 @@ function loslassen(ev) {
     d.e.slot = ziel; zuege++; merkmaleGesehen();
     rueck.push({ k: d.rope.k, ende: d.rope.ends.indexOf(d.e), von: d.von });
     ton.setze();
-    sperrenNeu();
     pruefeSieg();
   } else {
     ton.zurueck();
@@ -520,8 +480,8 @@ function ui() {
   const still = zuege === 0 && !gewonnen;
   tipp.hidden = !(num <= 2 && still);
   tipp.textContent = num === 1
-    ? 'Zieh ein Seilende auf einen freien Punkt, bis sich keine Seile mehr kreuzen. Ein Seil, das unter einem anderen liegt, ist gesperrt (dunkel): Bewege erst das obere.'
-    : 'Verschiebe die Seilenden, bis nichts mehr übereinanderliegt. Dunkle Seile liegen unter einem anderen und sind gesperrt.';
+    ? 'Zieh ein Seilende auf einen freien Punkt, bis sich keine Seile mehr kreuzen. Ein Seil bleibt immer in seiner Lage: Was unten liegt, bleibt unten.'
+    : 'Verschiebe die Seilenden, bis nichts mehr übereinanderliegt. Seile bleiben beim Ziehen unter den anderen, an denen sie hängen.';
   const neu = still ? merkmale().filter(m => !save.gesehen[m]) : [];
   tipp2.hidden = neu.length === 0;
   tipp2.textContent = neu.map(m => HINWEIS[m]).join(' ');
@@ -535,7 +495,7 @@ btnZurueck.addEventListener('click', () => {
   if (gewonnen || drag || !rueck.length) return;
   const z = rueck.pop();
   ropes[z.k].ends[z.ende].slot = z.von; zuege = Math.max(0, zuege - 1);
-  order = statischeReihenfolge(); sperrenNeu();
+  order = statischeReihenfolge();
   ton.zurueck(); ui(); dirty = true;
 });
 btnNeu.addEventListener('click', () => { if (!gewonnen) { ton.klick(); setzeAufStart(); } });
@@ -599,7 +559,7 @@ function frame(now) {
 // kleine Prüfschnittstelle (für automatische Tests)
 window.__sa = {
   info: () => ({ level: num, cols: lv.cols, rows: lv.rows, zuege, gewonnen, kreuzungen: kreuzungen(lv.cols, ropes.map(r => ({ a: r.ends[0].slot, b: r.ends[1].slot }))).length, save: JSON.parse(JSON.stringify(save)) }),
-  ends: () => ropes.map(r => r.ends.map(e => ({ slot: e.slot, fest: e.fest, scale: e.scale, gedeckt: !!r.gedeckt }))),
+  ends: () => ropes.map(r => r.ends.map(e => ({ slot: e.slot, fest: e.fest, scale: e.scale }))),
   schicht: () => lv.schicht.slice(),
   screen: slot => { const p = slotPos(slot); const v = new Vector3(p.x, 0.1, p.z).project(camera); return { x: (v.x + 1) / 2 * window.innerWidth, y: (1 - v.y) / 2 * window.innerHeight }; },
   laden: n => laden(n),

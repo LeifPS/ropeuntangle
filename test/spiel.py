@@ -14,23 +14,21 @@ with sync_playwright() as p:
     pg.wait_for_timeout(3000)
     i = pg.evaluate('window.__sa.info()')
     check(i['level'] == 1 and i['kreuzungen'] == 1, 'Level 1 startet mit 1 Kreuzung: %s' % i)
-    # Das rote Seil liegt unter dem blauen: gesperrt
-    e0 = pg.evaluate('window.__sa.ends()')
-    check(e0[0][0]['gedeckt'] and not e0[1][0]['gedeckt'], 'Rotes Seil gesperrt, blaues frei')
+    # Das rote Seil liegt unter dem blauen: es lässt sich trotzdem greifen und bleibt beim Ziehen darunter
+    sch0 = pg.evaluate('window.__sa.schicht()')
     a = pg.evaluate('window.__sa.screen(8)'); z = pg.evaluate('window.__sa.screen(1)')
-    pg.mouse.move(a['x'], a['y']); pg.mouse.down(); pg.mouse.move(z['x'], z['y'], steps=6); pg.mouse.up(); pg.wait_for_timeout(400)
-    print('   zuege', pg.evaluate('window.__sa.info().zuege'), 'meldung sichtbar', pg.is_visible('#meldung'), repr(pg.inner_text('#meldung')))
-    check(pg.evaluate('window.__sa.info().zuege') == 0 and pg.inner_text('#meldung').startswith('Dieses Seil liegt'), 'Gesperrtes Seil lässt sich nicht greifen, Hinweis wurde angezeigt')
-    pg.screenshot(path=out + '/gesperrt.png')
-    # Blaues Seil: Ende b (Slot 6) auf Slot 1 ziehen
-    a = pg.evaluate('window.__sa.screen(6)'); z = pg.evaluate('window.__sa.screen(1)')
     pg.mouse.move(a['x'], a['y']); pg.mouse.down()
-    for s in range(1, 13):
-        pg.mouse.move(a['x'] + (z['x'] - a['x']) * s / 12, a['y'] + (z['y'] - a['y']) * s / 12); pg.wait_for_timeout(60)
-    pg.screenshot(path=out + '/zieh.png')
-    pg.mouse.up(); pg.wait_for_timeout(900)
+    for s in range(1, 9):
+        pg.mouse.move(a['x'] + (z['x'] - a['x']) * s / 8, a['y'] + (z['y'] - a['y']) * s / 8); pg.wait_for_timeout(60)
+    pg.screenshot(path=out + '/unten-ziehen.png')
+    check(pg.evaluate('window.__sa.schicht()') == sch0, 'Lage der Seile bleibt beim Ziehen unverändert')
+    pg.mouse.up(); pg.wait_for_timeout(500)
+    print('   zuege', pg.evaluate('window.__sa.info()'))
+    check(pg.evaluate('window.__sa.info().zuege') == 1, 'Unteres Seil lässt sich bewegen')
+    check(pg.evaluate('window.__sa.schicht()') == sch0, 'Lage nach dem Loslassen unverändert')
+    pg.wait_for_timeout(400)
     i = pg.evaluate('window.__sa.info()')
-    check(i['gewonnen'] and i['zuege'] == 1 and i['kreuzungen'] == 0, 'Level 1 nach einem Zug gewonnen: %s' % i)
+    check(i['gewonnen'] and i['zuege'] == 1 and i['kreuzungen'] == 0, 'Level 1 nach einem Zug (am unten liegenden Seil) gewonnen: %s' % i)
     pg.wait_for_timeout(900)
     pg.screenshot(path=out + '/sieg.png')
     check(pg.is_visible('#sieg'), 'Sieg-Fenster sichtbar')
@@ -43,7 +41,7 @@ with sync_playwright() as p:
     # Zurück-Knopf
     ends0 = pg.evaluate('window.__sa.ends()')
     free = [s for s in range(pg.evaluate('window.__sa.slots()')) if all(e['slot'] != s for r in ends0 for e in r)]
-    fr_i = [i for i, r in enumerate(ends0) if not r[0]['gedeckt']][0]
+    fr_i = [i for i, r in enumerate(ends0) if not r[0]['fest']][0]
     mov = ends0[fr_i][0]['slot']
     a = pg.evaluate('window.__sa.screen(%d)' % mov); z = pg.evaluate('window.__sa.screen(%d)' % free[0])
     pg.mouse.move(a['x'], a['y']); pg.mouse.down()

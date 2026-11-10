@@ -14,8 +14,8 @@ with sync_playwright() as p:
     for lvl in range(18, 40):
         pg.evaluate('n=>window.__sa.laden(n)', lvl)
         en = pg.evaluate('window.__sa.ends()')
-        lim = [r for r in pg.evaluate('window.__sa.limited()') if not r['fest'] and not en[r['i']][0]['gedeckt']]
-        frei_seile = [i for i, rr in enumerate(en) if not rr[0]['gedeckt'] and not rr[0]['fest'] and not any(l['i'] == i for l in pg.evaluate('window.__sa.limited()'))]
+        lim = [r for r in pg.evaluate('window.__sa.limited()') if not r['fest']]
+        frei_seile = [i for i, rr in enumerate(en) if not rr[0]['fest'] and not any(l['i'] == i for l in pg.evaluate('window.__sa.limited()'))]
         if lim and frei_seile and pg.evaluate('window.__sa.sperr()'): break
     print('Level', lvl)
     pg.wait_for_timeout(9000)
@@ -49,7 +49,7 @@ with sync_playwright() as p:
     # Stein: Ziel auf gesperrtes Feld
     st = sperr[0]
     ends = pg.evaluate('window.__sa.ends()')
-    free_end = [(i, e) for i, rr in enumerate(ends) for k, e in enumerate(rr) if k == 0 and not e['fest'] and not e['gedeckt'] and not any(l['i'] == i for l in pg.evaluate('window.__sa.limited()'))][0]
+    free_end = [(i, e) for i, rr in enumerate(ends) for k, e in enumerate(rr) if k == 0 and not e['fest'] and not any(l['i'] == i for l in pg.evaluate('window.__sa.limited()'))][0]
     zieh(free_end[1]['slot'], st)
     check(pg.evaluate('window.__sa.info().zuege') == 1, 'Gesperrtes Feld nimmt keinen Pflock an')
     # Levelauswahl

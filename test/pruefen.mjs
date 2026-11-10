@@ -2,7 +2,7 @@
 // - feste Level sind nach den Spielregeln (Seil nur bewegbar, wenn nichts darauf liegt) lösbar (Tiefensuche)
 // - erzeugte Level: nicht schon gelöst, gültiges Layout, Längen/Sperrfelder/Anker stimmen, und die beim Mischen
 //   aufgezeichneten Züge lassen sich rückwärts nach denselben Regeln abspielen und führen zur gelösten Lage
-import { kreuzungen, reichtBis, istGedeckt } from '../src/logic.js';
+import { kreuzungen, reichtBis } from '../src/logic.js';
 import { FEST, levelFuer } from '../src/levels.js';
 
 function loesbar(lv, maxTiefe) {
@@ -17,7 +17,6 @@ function loesbar(lv, maxTiefe) {
       if ((gesehen.get(key) || -1) >= d) return false; gesehen.set(key, d);
       const bel = new Uint8Array(n); s.forEach(r => { bel[r.a] = 1; bel[r.b] = 1; }); sperr.forEach(x => { bel[x] = 1; });
       for (let i = 0; i < s.length; i++) {
-        if (istGedeckt(cols, s, lv.schicht, i)) continue;
         for (const e of (s[i].ank ? ['b'] : ['a', 'b'])) {
           const alt = s[i][e];
           for (let t = 0; t < n; t++) {
@@ -60,7 +59,7 @@ for (let n = 6; n <= 120; n++) {
   for (let i = lv.spur.length - 1; i >= 0; i--) {
     const z = lv.spur[i], r = s[z.k];
     const frei = !s.some((q, j) => j !== z.k && (q.a === z.von || q.b === z.von)) && !(lv.sperr || []).includes(z.von);
-    if (istGedeckt(lv.cols, s, lv.schicht, z.k) || !frei || !reichtBis(lv.cols, r, z.ende, z.von)) { rueckOk = false; break; }
+    if (!frei || !reichtBis(lv.cols, r, z.ende, z.von)) { rueckOk = false; break; }
     r[z.ende] = z.von;
   }
   const gelöst = kreuzungen(lv.cols, s).length === 0;
