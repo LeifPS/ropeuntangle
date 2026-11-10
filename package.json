@@ -1,0 +1,13 @@
+{
+  "name": "ropeuntangle",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "bauen": "esbuild src/main.js --bundle --minify --format=iife --target=es2019 --outfile=public/game.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "three": "^0.170.0"
+  },
+  "type": "module"
+}

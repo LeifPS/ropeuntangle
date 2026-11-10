@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<script src="lgh-vorlade.js"></script><!--lgh-->
+
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f3e6e0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Seilsalat</title>
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #f3e6e0; overscroll-behavior: none; }
+  body { position: fixed; inset: 0; font-family: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #243a78;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+  .hud { position: fixed; left: 0; right: 0; display: flex; justify-content: center; pointer-events: none; }
+  #oben { top: calc(10px + env(safe-area-inset-top, 0px)); flex-direction: column; align-items: center; gap: 6px; }
+  #lvlpille { background: #2f4f9a; color: #fff; border-radius: 999px; padding: 7px 18px; font-weight: 800; font-size: 17px; letter-spacing: .3px; box-shadow: 0 3px 0 #223a74; display: flex; gap: 10px; align-items: baseline; }
+  #zuege { font-weight: 600; font-size: 13px; opacity: .8; }
+  #tipp, #hinweisAnker { max-width: min(86vw, 420px); text-align: center; font-size: 14px; font-weight: 600; background: rgba(255,255,255,.72); border-radius: 12px; padding: 6px 12px; color: #243a78; }
+  #unten { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); gap: 12px; }
+  button { font: inherit; border: 0; cursor: pointer; pointer-events: auto; }
+  .knopf { display: flex; align-items: center; gap: 8px; background: #fff; color: #2f4f9a; font-weight: 800; font-size: 16px; padding: 11px 18px; border-radius: 16px; box-shadow: 0 3px 0 #cdb8ad; min-height: 44px; }
+  .knopf:active { transform: translateY(2px); box-shadow: 0 1px 0 #cdb8ad; }
+  .knopf:disabled { opacity: .4; cursor: default; }
+  .knopf svg { width: 20px; height: 20px; }
+  @media (max-height: 520px) { #oben { top: calc(4px + env(safe-area-inset-top, 0px)); } #lvlpille { padding: 4px 14px; font-size: 15px; } #tipp, #hinweisAnker { font-size: 12px; padding: 3px 10px; }
+    #unten { bottom: calc(5px + env(safe-area-inset-bottom, 0px)); } .knopf { padding: 6px 14px; min-height: 36px; font-size: 14px; } .kasten { padding: 14px 24px; } .kasten h2 { font-size: 22px; } .kasten p { margin-bottom: 10px; } }
+  #sieg { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(36,58,120,.28); animation: ein .25s ease-out; }
+  #sieg[hidden] { display: none; }
+  .kasten { background: #fff; border-radius: 24px; padding: 24px 30px 22px; text-align: center; box-shadow: 0 6px 0 #cdb8ad, 0 18px 40px rgba(0,0,0,.2); min-width: 220px; }
+  .kasten h2 { margin: 0 0 4px; font-size: 28px; color: #2f4f9a; }
+  .kasten p { margin: 0 0 16px; color: #5a6a98; font-weight: 600; }
+  .gross { background: #2f4f9a; color: #fff; font-weight: 800; font-size: 18px; padding: 12px 34px; border-radius: 16px; box-shadow: 0 4px 0 #223a74; }
+  .gross:active { transform: translateY(2px); box-shadow: 0 2px 0 #223a74; }
+  @keyframes ein { from { opacity: 0; } to { opacity: 1; } }
+  #fehler { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 30px; font-weight: 700; }
+</style>
+</head>
+<body>
+<canvas id="c" tabindex="-1"></canvas>
+<div class="hud" id="oben">
+  <div id="lvlpille"><span id="lvl">Level 1</span><span id="zuege">0 Züge</span></div>
+  <div id="tipp" hidden></div>
+  <div id="hinweisAnker" hidden>Schwarze Anker sitzen fest: Nur das farbige Ende lässt sich verschieben.</div>
+</div>
+<div class="hud" id="unten">
+  <button class="knopf" id="zurueck" disabled aria-label="Letzten Zug zurücknehmen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Zurück</button>
+  <button class="knopf" id="neu" aria-label="Level neu starten"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v5h-5"/></svg>Neu</button>
+</div>
+<div id="sieg" hidden><div class="kasten"><h2>Geschafft!</h2><p id="siegtext"></p><button class="gross" id="weiter">Weiter</button></div></div>
+<div id="fehler">Dein Gerät kann die 3D-Ansicht gerade nicht anzeigen. Bitte die Seite neu laden.</div>
+<script>
+  window.addEventListener('error', function (e) { if (!window.__sa) document.getElementById('fehler').style.display = 'flex'; });
+</script>
+<script src="game.js"></script>
+<!--lgh-start--><script>window.LGH_SPIEL='seilsalat';window.LGH_POS='br';</script><script src="lgh-modul.js"></script><!--lgh-ende-->
+</body>
+</html>
