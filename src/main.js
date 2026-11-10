@@ -5,7 +5,7 @@ import {
   CanvasTexture, RepeatWrapping, PCFSoftShadowMap, BufferGeometry, BufferAttribute, SRGBColorSpace,
 } from 'three';
 import { levelFuer, PALETTE, FEST_ANZAHL } from './levels.js';
-import { kreuzungen, reichtBis } from './logic.js';
+import { kreuzungen, reichtBis, gedeckteListe, segHit } from './logic.js';
 import { Ton } from './ton.js';
 
 // ---------- Maße (1 Einheit = Abstand zweier Pflöcke) ----------
@@ -112,6 +112,7 @@ function bauePflock(farbe, anker) {
   const knauf = new Mesh(new SphereGeometry(0.21, 32, 20), mKnauf);
   knauf.scale.y = 0.82; knauf.position.y = 0.1; knauf.castShadow = true;
   g.add(rand, base, ring, knauf);
+  g.userData.mats = anker ? null : [[mBase.color, new Color(farbe)], [mKnauf.color, new Color(farbe)]];
   if (anker) {
     for (let i = 0; i < 4; i++) {
       const a = Math.PI / 4 + i * Math.PI / 2;
@@ -142,6 +143,36 @@ function aufraeumen() {
   }
   gfx = new Group();
   scene.add(gfx);
+}
+
+const GRAU = new Color(0x5d5666);
+function statischeReihenfolge() { return ropes.map((_, k) => k).sort((x, y) => lv.schicht[x] - lv.schicht[y]); }
+function logik() { return ropes.map(r => ({ a: r.ends[0].slot, b: r.ends[1].slot })); }
+// Welche Seile sind gesperrt (liegen unter einem anderen)? Gesperrte Pflöcke werden abgedunkelt.
+function sperrenNeu() {
+  const g = gedeckteListe(lv.cols, logik(), lv.schicht);
+  ropes.forEach((r, k) => {
+    r.gedeckt = g[k];
+    for (const e of r.ends) {
+      const m = e.peg.userData.mats; if (!m) continue;
+      for (const [c, orig] of m) c.copy(orig).lerp(GRAU, g[k] ? 0.5 : 0);
+    }
+  });
+  dirty = true;
+}
+function ueberDecker(k) {   // Seile, die auf Seil k liegen
+  const l = logik(), a = l[k], cols = lv.cols, out = [];
+  for (let j = 0; j < l.length; j++) {
+    if (j === k || lv.schicht[j] <= lv.schicht[k]) continue;
+    const q = l[j];
+    if (segHit(a.a % cols, (a.a / cols) | 0, a.b % cols, (a.b / cols) | 0, q.a % cols, (q.a / cols) | 0, q.b % cols, (q.b / cols) | 0)) out.push(j);
+  }
+  return out;
+}
+let meldungTimer = 0;
+function meldung(text) {
+  const m = $('meldung'); m.textContent = text; m.hidden = false;
+  clearTimeout(meldungTimer); meldungTimer = setTimeout(() => { m.hidden = true; }, 2600);
 }
 
 function laden(n) {
@@ -184,7 +215,7 @@ function laden(n) {
       const s0 = 0.001;
       peg.position.set(p.x, 0, p.z); peg.scale.setScalar(s0);
       gfx.add(peg);
-      rope.ends.push({ slot, px: p.x, pz: p.z, lift: 0, tl: 0, fest, peg, scale: s0, ts: 1, verzoegerung: (k * 0.04 + e * 0.02) });
+      rope.ends.push({ slot, px: p.x, pz: p.z, lift: 0, tl: 0, fest, peg, scale: s0, ts: 1, shake: 0, verzoegerung: (k * 0.04 + e * 0.02) });
     }
     const mesh = new Mesh(neuesSeilGeo(), seilMaterial(farbe));
     mesh.castShadow = true; mesh.receiveShadow = true;
@@ -199,9 +230,11 @@ function laden(n) {
     return rope;
   });
   alle = ropes.flatMap(r => r.ends);
-  order = ropes.map((_, k) => k);
+  order = statischeReihenfolge();
   rueck = []; zuege = 0; gewonnen = false; drag = null;
   siegBox.hidden = true;
+  $('meldung').hidden = true;
+  sperrenNeu();
   fitCamera();
   baueSeile();
   ui();
@@ -210,9 +243,10 @@ function laden(n) {
 
 function setzeAufStart() {
   ropes.forEach((r, k) => { r.ends.forEach((e, i) => { e.slot = r.start[i]; }); });
-  order = ropes.map((_, k) => k);
+  order = statischeReihenfolge();
   rueck = []; zuege = 0; gewonnen = false; drag = null;
   siegBox.hidden = true;
+  sperrenNeu();
   ui(); dirty = true;
 }
 
@@ -384,6 +418,14 @@ canvas.addEventListener('pointerdown', ev => {
   }
   if (!best) return;
   ev.preventDefault();
+  if (best.rope.gedeckt) {   // Seil liegt unter einem anderen: erst das obere bewegen
+    for (const e of best.rope.ends) e.shake = 0.4;
+    for (const j of ueberDecker(best.rope.k)) for (const e of ropes[j].ends) e.scale = 1.28;
+    ton.nein();
+    meldung('Dieses Seil liegt unter einem anderen. Bewege zuerst das obere Seil.');
+    dirty = true;
+    return;
+  }
   try { canvas.setPointerCapture(ev.pointerId); } catch (err) { }
   const touch = ev.pointerType === 'touch' || ev.pointerType === 'pen';
   drag = { rope: best.rope, e: best.e, id: ev.pointerId, von: best.e.slot, ziel: best.e.slot, off: touch ? -0.62 : 0, grab: { x: best.e.px - p.x, z: best.e.pz - p.z } };
@@ -424,11 +466,13 @@ function loslassen(ev) {
   const d = drag; drag = null;
   d.e.tl = 0;
   gfx.userData.reich.visible = false;
+  order = statischeReihenfolge();
   const ziel = d.ziel;
   if (ziel !== d.von && !belegt(ziel, d.e)) {
     d.e.slot = ziel; zuege++; merkmaleGesehen();
     rueck.push({ k: d.rope.k, ende: d.rope.ends.indexOf(d.e), von: d.von });
     ton.setze();
+    sperrenNeu();
     pruefeSieg();
   } else {
     ton.zurueck();
@@ -476,8 +520,8 @@ function ui() {
   const still = zuege === 0 && !gewonnen;
   tipp.hidden = !(num <= 2 && still);
   tipp.textContent = num === 1
-    ? 'Zieh ein Seilende auf einen freien Punkt, bis sich keine Seile mehr kreuzen.'
-    : 'Verschiebe die Seilenden, bis nichts mehr übereinanderliegt.';
+    ? 'Zieh ein Seilende auf einen freien Punkt, bis sich keine Seile mehr kreuzen. Ein Seil, das unter einem anderen liegt, ist gesperrt (dunkel): Bewege erst das obere.'
+    : 'Verschiebe die Seilenden, bis nichts mehr übereinanderliegt. Dunkle Seile liegen unter einem anderen und sind gesperrt.';
   const neu = still ? merkmale().filter(m => !save.gesehen[m]) : [];
   tipp2.hidden = neu.length === 0;
   tipp2.textContent = neu.map(m => HINWEIS[m]).join(' ');
@@ -491,6 +535,7 @@ btnZurueck.addEventListener('click', () => {
   if (gewonnen || drag || !rueck.length) return;
   const z = rueck.pop();
   ropes[z.k].ends[z.ende].slot = z.von; zuege = Math.max(0, zuege - 1);
+  order = statischeReihenfolge(); sperrenNeu();
   ton.zurueck(); ui(); dirty = true;
 });
 btnNeu.addEventListener('click', () => { if (!gewonnen) { ton.klick(); setzeAufStart(); } });
@@ -528,6 +573,7 @@ function frame(now) {
     const gehalten = drag && drag.e === e;
     if (gehalten && drag.x !== undefined) { tx = drag.x; tz = drag.z; }
     else { const p = slotPos(e.slot); tx = p.x; tz = p.z; }
+    if (e.shake > 0) { e.shake = Math.max(0, e.shake - dt); tx += Math.sin(e.shake * 55) * 0.07 * (e.shake / 0.4); bewegt = true; }
     const kp = 1 - Math.exp(-dt * (gehalten ? 38 : 20));
     const dx = tx - e.px, dz = tz - e.pz;
     if (Math.abs(dx) > 0.0008 || Math.abs(dz) > 0.0008) { e.px += dx * kp; e.pz += dz * kp; bewegt = true; }
@@ -553,7 +599,8 @@ function frame(now) {
 // kleine Prüfschnittstelle (für automatische Tests)
 window.__sa = {
   info: () => ({ level: num, cols: lv.cols, rows: lv.rows, zuege, gewonnen, kreuzungen: kreuzungen(lv.cols, ropes.map(r => ({ a: r.ends[0].slot, b: r.ends[1].slot }))).length, save: JSON.parse(JSON.stringify(save)) }),
-  ends: () => ropes.map(r => r.ends.map(e => ({ slot: e.slot, fest: e.fest, scale: e.scale }))),
+  ends: () => ropes.map(r => r.ends.map(e => ({ slot: e.slot, fest: e.fest, scale: e.scale, gedeckt: !!r.gedeckt }))),
+  schicht: () => lv.schicht.slice(),
   screen: slot => { const p = slotPos(slot); const v = new Vector3(p.x, 0.1, p.z).project(camera); return { x: (v.x + 1) / 2 * window.innerWidth, y: (1 - v.y) / 2 * window.innerHeight }; },
   laden: n => laden(n),
   slots: () => slotXZ.length,

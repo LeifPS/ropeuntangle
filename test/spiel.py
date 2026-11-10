@@ -14,8 +14,16 @@ with sync_playwright() as p:
     pg.wait_for_timeout(3000)
     i = pg.evaluate('window.__sa.info()')
     check(i['level'] == 1 and i['kreuzungen'] == 1, 'Level 1 startet mit 1 Kreuzung: %s' % i)
-    # Rotes Seil: Ende b (Slot 8) auf Slot 1 ziehen
+    # Das rote Seil liegt unter dem blauen: gesperrt
+    e0 = pg.evaluate('window.__sa.ends()')
+    check(e0[0][0]['gedeckt'] and not e0[1][0]['gedeckt'], 'Rotes Seil gesperrt, blaues frei')
     a = pg.evaluate('window.__sa.screen(8)'); z = pg.evaluate('window.__sa.screen(1)')
+    pg.mouse.move(a['x'], a['y']); pg.mouse.down(); pg.mouse.move(z['x'], z['y'], steps=6); pg.mouse.up(); pg.wait_for_timeout(400)
+    print('   zuege', pg.evaluate('window.__sa.info().zuege'), 'meldung sichtbar', pg.is_visible('#meldung'), repr(pg.inner_text('#meldung')))
+    check(pg.evaluate('window.__sa.info().zuege') == 0 and pg.inner_text('#meldung').startswith('Dieses Seil liegt'), 'Gesperrtes Seil lässt sich nicht greifen, Hinweis wurde angezeigt')
+    pg.screenshot(path=out + '/gesperrt.png')
+    # Blaues Seil: Ende b (Slot 6) auf Slot 1 ziehen
+    a = pg.evaluate('window.__sa.screen(6)'); z = pg.evaluate('window.__sa.screen(1)')
     pg.mouse.move(a['x'], a['y']); pg.mouse.down()
     for s in range(1, 13):
         pg.mouse.move(a['x'] + (z['x'] - a['x']) * s / 12, a['y'] + (z['y'] - a['y']) * s / 12); pg.wait_for_timeout(60)
@@ -35,16 +43,17 @@ with sync_playwright() as p:
     # Zurück-Knopf
     ends0 = pg.evaluate('window.__sa.ends()')
     free = [s for s in range(pg.evaluate('window.__sa.slots()')) if all(e['slot'] != s for r in ends0 for e in r)]
-    mov = ends0[0][0]['slot']
+    fr_i = [i for i, r in enumerate(ends0) if not r[0]['gedeckt']][0]
+    mov = ends0[fr_i][0]['slot']
     a = pg.evaluate('window.__sa.screen(%d)' % mov); z = pg.evaluate('window.__sa.screen(%d)' % free[0])
     pg.mouse.move(a['x'], a['y']); pg.mouse.down()
     for s in range(1, 9):
         pg.mouse.move(a['x'] + (z['x'] - a['x']) * s / 8, a['y'] + (z['y'] - a['y']) * s / 8); pg.wait_for_timeout(40)
     pg.mouse.up(); pg.wait_for_timeout(500)
     check(pg.evaluate('window.__sa.info().zuege') == 1, 'Zug gezählt')
-    check(pg.evaluate('window.__sa.ends()[0][0].slot') == free[0], 'Ende liegt auf dem Zielpflock')
+    check(pg.evaluate('window.__sa.ends()[%d][0].slot' % fr_i) == free[0], 'Ende liegt auf dem Zielpflock')
     pg.click('#zurueck'); pg.wait_for_timeout(300)
-    check(pg.evaluate('window.__sa.ends()[0][0].slot') == mov and pg.evaluate('window.__sa.info().zuege') == 0, 'Zurück stellt den Zug zurück')
+    check(pg.evaluate('window.__sa.ends()[%d][0].slot' % fr_i) == mov and pg.evaluate('window.__sa.info().zuege') == 0, 'Zurück stellt den Zug zurück')
     # Anker nicht greifbar (Level 3)
     pg.evaluate('window.__sa.laden(3)'); pg.wait_for_timeout(800)
     e3 = pg.evaluate('window.__sa.ends()'); ank = [r[0]['slot'] for r in e3 if r[0]['fest']][0]

@@ -6,6 +6,7 @@
 
 
 
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#f3e6e0">
@@ -23,13 +24,15 @@
   #lvlpille { pointer-events: auto; cursor: pointer; background: #2f4f9a; color: #fff; border-radius: 999px; padding: 7px 18px; font-weight: 800; font-size: 17px; letter-spacing: .3px; box-shadow: 0 3px 0 #223a74; display: flex; gap: 10px; align-items: baseline; }
   #zuege { font-weight: 600; font-size: 13px; opacity: .8; }
   #tipp, #tipp2 { max-width: min(86vw, 420px); text-align: center; font-size: 14px; font-weight: 600; background: rgba(255,255,255,.72); border-radius: 12px; padding: 6px 12px; color: #243a78; }
+  #meldung { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); max-width: min(86vw, 400px); text-align: center; background: #243a78; color: #fff; font-weight: 700; font-size: 14px; padding: 9px 16px; border-radius: 14px; pointer-events: none; box-shadow: 0 3px 0 #17275a; animation: ein .2s ease-out; }
+  #meldung[hidden] { display: none; }
   #unten { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); gap: 12px; }
   button { font: inherit; border: 0; cursor: pointer; pointer-events: auto; }
   .knopf { display: flex; align-items: center; gap: 8px; background: #fff; color: #2f4f9a; font-weight: 800; font-size: 16px; padding: 11px 18px; border-radius: 16px; box-shadow: 0 3px 0 #cdb8ad; min-height: 44px; }
   .knopf:active { transform: translateY(2px); box-shadow: 0 1px 0 #cdb8ad; }
   .knopf:disabled { opacity: .4; cursor: default; }
   .knopf svg { width: 20px; height: 20px; }
-  @media (max-height: 520px) { #oben { top: calc(4px + env(safe-area-inset-top, 0px)); } #lvlpille { padding: 4px 14px; font-size: 15px; } #tipp, #tipp2 { font-size: 12px; padding: 3px 10px; }
+  @media (max-height: 520px) { #meldung { bottom: 50px; font-size: 12px; padding: 6px 12px; } #oben { top: calc(4px + env(safe-area-inset-top, 0px)); } #lvlpille { padding: 4px 14px; font-size: 15px; } #tipp, #tipp2 { font-size: 12px; padding: 3px 10px; }
     #unten { bottom: calc(5px + env(safe-area-inset-bottom, 0px)); } .knopf { padding: 6px 14px; min-height: 36px; font-size: 14px; } .kasten { padding: 14px 24px; } .kasten h2 { font-size: 22px; } .kasten p { margin-bottom: 10px; } }
   #wahl { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(36,58,120,.32); }
   #wahl[hidden] { display: none; }
@@ -61,6 +64,7 @@
   <button class="knopf" id="zurueck" disabled aria-label="Letzten Zug zurücknehmen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Zurück</button>
   <button class="knopf" id="neu" aria-label="Level neu starten"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v5h-5"/></svg>Neu</button>
 </div>
+<div id="meldung" hidden></div>
 <div id="sieg" hidden><div class="kasten"><h2>Geschafft!</h2><p id="siegtext"></p><button class="gross" id="weiter">Weiter</button></div></div>
 <div id="wahl" hidden><div class="kasten"><h2>Level wählen</h2><div id="wahlraster"></div><button class="klein" id="wahlzu">Schließen</button></div></div>
 <div id="fehler">Dein Gerät kann die 3D-Ansicht gerade nicht anzeigen. Bitte die Seite neu laden.</div>

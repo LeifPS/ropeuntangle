@@ -2,6 +2,7 @@
 // Ein Level: { cols, rows, ropes: [{ a, b, ank, max }], sperr: [..] }
 // a, b = Pflock-Nummern im Raster (zeilenweise); ank = Ende "a" sitzt fest auf einem schwarzen Anker;
 // max = größte Länge des Seils in Pflockabständen (fehlt = unbegrenzt); sperr = gesperrte Felder, auf die kein Pflock darf.
+// schicht[i] = feste Lage von Seil i (höhere Zahl liegt oben). Ein Seil darf nur bewegt werden, wenn kein höher liegendes Seil es kreuzt.
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -51,6 +52,18 @@ export function reichtBis(cols, r, ende, slot) {
   const o = ende === 'a' ? r.b : r.a;
   return Math.hypot((o % cols) - (slot % cols), ((o / cols) | 0) - ((slot / cols) | 0)) <= r.max + 1e-6;
 }
+// Liegt ein höheres Seil auf Seil k? (dann ist k gesperrt)
+export function istGedeckt(cols, ropes, schicht, k) {
+  const p = ropes[k], ax = p.a % cols, ay = (p.a / cols) | 0, bx = p.b % cols, by = (p.b / cols) | 0;
+  for (let j = 0; j < ropes.length; j++) {
+    if (j === k || schicht[j] <= schicht[k]) continue;
+    const q = ropes[j];
+    if (segHit(ax, ay, bx, by, q.a % cols, (q.a / cols) | 0, q.b % cols, (q.b / cols) | 0)) return true;
+  }
+  return false;
+}
+export function gedeckteListe(cols, ropes, schicht) { return ropes.map((_, k) => istGedeckt(cols, ropes, schicht, k)); }
+
 function zaehle(cols, ropes) { return kreuzungen(cols, ropes).length; }
 
 // ---------- Erzeugung ----------
@@ -86,6 +99,9 @@ export function erzeuge(cfg, seed) {
     const ropes = lay.map(r => ({ a: r.a, b: r.b, ank: false }));
     for (let i = 0; i < Math.min(cfg.anchors || 0, ropes.length); i++) ropes[idx[i]].ank = true;
     const loes = ropes.map(r => ({ a: r.a, b: r.b }));
+    // feste Lagen: zufällige Reihenfolge, höhere Zahl liegt oben
+    const schicht = ropes.map((_, i) => i);
+    for (let i = schicht.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [schicht[i], schicht[j]] = [schicht[j], schicht[i]]; }
     // Seillängen: einige Seile reichen nur so weit, wie sie in der Lösung gebraucht werden (plus etwas Luft)
     const nKurz = Math.min(ropes.length, Math.round((cfg.kurz || 0) * ropes.length) + ((cfg.kurz || 0) > 0 ? 1 : 0));
     const idx2 = ropes.map((_, i) => i);
@@ -108,20 +124,25 @@ export function erzeuge(cfg, seed) {
     }
     const ziel = Math.max(2, Math.round(ropes.length * (cfg.wirr || 1.2)));
     let jetzt = 0, bewegt = 0;
+    const spur = [];
     for (let it = 0; it < 9000; it++) {
       if (jetzt >= ziel && bewegt >= ropes.length * 2) break;
       const k = (R() * ropes.length) | 0, r = ropes[k];
       const ende = r.ank ? 'b' : (R() < 0.5 ? 'a' : 'b');
       const neu = (R() * n) | 0;
       if (belegt[neu] || !reichtBis(cols, r, ende, neu)) continue;
+      // Regel wie im Spiel: nur ein Seil, auf dem nichts liegt, darf bewegt werden; damit das Level sicher lösbar ist,
+      // muss es auch an der neuen Stelle frei liegen (dann geht der Zug rückwärts ebenfalls)
+      if (istGedeckt(cols, ropes, schicht, k)) continue;
       const alt = r[ende];
       r[ende] = neu;
+      if (istGedeckt(cols, ropes, schicht, k)) { r[ende] = alt; continue; }
       const z = zaehle(cols, ropes);
-      if (z >= jetzt || R() < 0.08) { belegt[alt] = 0; belegt[neu] = 1; jetzt = z; bewegt++; }
+      if (z >= jetzt || R() < 0.08) { belegt[alt] = 0; belegt[neu] = 1; jetzt = z; bewegt++; spur.push({ k, ende, von: alt, nach: neu }); }
       else r[ende] = alt;
     }
     if (jetzt < 1) continue;
-    return { cols, rows, ropes, sperr, loes, kreuzungen: jetzt };
+    return { cols, rows, ropes, sperr, schicht, loes, spur, kreuzungen: jetzt };
   }
   throw new Error('Level konnte nicht erzeugt werden');
 }

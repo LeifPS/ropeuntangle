@@ -10,17 +10,26 @@ with sync_playwright() as p:
     b, pg, logs = start(p, 390, 844, touch=False)
     pg.goto('http://127.0.0.1:%d/index.html' % PORT)
     pg.wait_for_function('window.__sa')
-    pg.evaluate('n=>window.__sa.laden(n)', 18); pg.wait_for_timeout(9000)
+    lim = []
+    for lvl in range(18, 40):
+        pg.evaluate('n=>window.__sa.laden(n)', lvl)
+        en = pg.evaluate('window.__sa.ends()')
+        lim = [r for r in pg.evaluate('window.__sa.limited()') if not r['fest'] and not en[r['i']][0]['gedeckt']]
+        frei_seile = [i for i, rr in enumerate(en) if not rr[0]['gedeckt'] and not rr[0]['fest'] and not any(l['i'] == i for l in pg.evaluate('window.__sa.limited()'))]
+        if lim and frei_seile and pg.evaluate('window.__sa.sperr()'): break
+    print('Level', lvl)
+    pg.wait_for_timeout(9000)
     info = pg.evaluate('window.__sa.info()'); cols = info['cols']
-    lim = [r for r in pg.evaluate('window.__sa.limited()') if not r['fest']]
-    r = min(lim, key=lambda r: r['max'])
     ends = pg.evaluate('window.__sa.ends()'); sperr = pg.evaluate('window.__sa.sperr()')
     used = {e['slot'] for rr in ends for e in rr}
     frei = [s for s in range(pg.evaluate('window.__sa.slots()')) if s not in used and s not in sperr]
     def d(s, t): return math.hypot(s % cols - t % cols, s // cols - t // cols)
-    # Ende a bewegen; anderes Ende ist b
-    weit = [s for s in frei if d(s, r['b']) > r['max'] + 0.3]
-    nah = [s for s in frei if d(s, r['b']) < r['max'] - 0.05 and s != r['a']]
+    r = None
+    for cand in lim:
+        weit = [s for s in frei if d(s, cand['b']) > cand['max'] + 0.3]
+        nah = [s for s in frei if d(s, cand['b']) < cand['max'] - 0.05 and s != cand['a']]
+        if weit and nah: r = cand; break
+    assert r, 'kein passendes Seil'
     print('Seil', r, 'weit', weit[:3], 'nah', nah[:3])
     def zieh(von, nach, halten=False):
         a = pg.evaluate('window.__sa.screen(%d)' % von); z = pg.evaluate('window.__sa.screen(%d)' % nach)
@@ -31,13 +40,16 @@ with sync_playwright() as p:
             pg.wait_for_timeout(1500); pg.screenshot(path=out + '/kurz_halten.png')
         pg.mouse.up(); pg.wait_for_timeout(600)
     zieh(r['a'], weit[0], halten=True)
-    check(pg.evaluate('window.__sa.info().zuege') == 0, 'Zu weit entferntes Ziel wird abgelehnt')
+    print('   nach weit:', pg.evaluate('window.__sa.info()'), pg.evaluate('window.__sa.ends()[%d]' % r['i']))
+    sl = pg.evaluate('window.__sa.ends()[%d][0].slot' % r['i'])
+    check(d(sl, r['b']) <= r['max'] + 1e-6, 'Zu weites Ziel: Pflock landet nie außerhalb der Reichweite (landet auf %d)' % sl)
+    if pg.evaluate('window.__sa.info().zuege') == 1: pg.click('#zurueck'); pg.wait_for_timeout(400)
     zieh(r['a'], nah[0])
     check(pg.evaluate('window.__sa.info().zuege') == 1 and pg.evaluate('window.__sa.ends()[%d][0].slot' % r['i']) == nah[0], 'Erreichbares Ziel wird angenommen')
     # Stein: Ziel auf gesperrtes Feld
     st = sperr[0]
     ends = pg.evaluate('window.__sa.ends()')
-    free_end = [(i, e) for i, rr in enumerate(ends) for k, e in enumerate(rr) if not e['fest'] and not any(l['i'] == i for l in lim)][0]
+    free_end = [(i, e) for i, rr in enumerate(ends) for k, e in enumerate(rr) if k == 0 and not e['fest'] and not e['gedeckt'] and not any(l['i'] == i for l in pg.evaluate('window.__sa.limited()'))][0]
     zieh(free_end[1]['slot'], st)
     check(pg.evaluate('window.__sa.info().zuege') == 1, 'Gesperrtes Feld nimmt keinen Pflock an')
     # Levelauswahl

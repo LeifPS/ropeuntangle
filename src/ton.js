@@ -32,5 +32,6 @@ export class Ton {
   nimm() { this._ton(330, 0.09, 'triangle', 0.14, 520); }
   setze() { this._ton(180, 0.14, 'sine', 0.3, 90); this._ton(760, 0.05, 'triangle', 0.08, 0, 0.01); }
   zurueck() { this._ton(420, 0.1, 'triangle', 0.12, 260); }
+  nein() { this._ton(220, 0.12, 'square', 0.06, 150); this._ton(190, 0.14, 'square', 0.06, 120, 0.13); }
   sieg() { [523, 659, 784, 1047].forEach((f, i) => this._ton(f, 0.26, 'triangle', 0.16, 0, i * 0.11)); }
 }
