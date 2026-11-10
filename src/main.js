@@ -5,7 +5,7 @@ import {
   CanvasTexture, RepeatWrapping, PCFSoftShadowMap, BufferGeometry, BufferAttribute, SRGBColorSpace,
 } from 'three';
 import { levelFuer, PALETTE, FEST_ANZAHL } from './levels.js';
-import { kreuzungen } from './logic.js';
+import { kreuzungen, reichtBis } from './logic.js';
 import { Ton } from './ton.js';
 
 // ---------- Maße (1 Einheit = Abstand zweier Pflöcke) ----------
@@ -18,8 +18,9 @@ const BG = 0xf3e6e0;
 
 // ---------- Speicher ----------
 const KEY = 'seilsalat.v1';
-let save = { level: 1, best: 1, ton: true };
+let save = { level: 1, best: 1, ton: true, gesehen: {} };
 try { Object.assign(save, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { }
+if (!save.gesehen || typeof save.gesehen !== 'object') save.gesehen = {};
 function speichern() { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch (e) { } }
 
 const ton = new Ton(() => save.ton);
@@ -89,11 +90,11 @@ const konturDick = new ShaderMaterial({
 
 // ---------- Spielzustand ----------
 let lv = null, num = 1, ropes = [], order = [], gfx = null, rueck = [], zuege = 0, gewonnen = false;
-let drag = null, dirty = true, alle = [];
+let drag = null, dirty = true, alle = [], sperr = new Set(), UP = new Vector3(0, 1, 0);
 const slotXZ = [];
 
 const $ = id => document.getElementById(id);
-const hudLevel = $('lvl'), hudZuege = $('zuege'), btnZurueck = $('zurueck'), btnNeu = $('neu'), siegBox = $('sieg'), tipp = $('tipp');
+const hudLevel = $('lvl'), hudZuege = $('zuege'), btnZurueck = $('zurueck'), btnNeu = $('neu'), siegBox = $('sieg'), tipp = $('tipp'), tipp2 = $('tipp2');
 
 function slotPos(i) { return slotXZ[i]; }
 
@@ -122,6 +123,18 @@ function bauePflock(farbe, anker) {
   return g;
 }
 
+function baueStein() {
+  const g = new Group();
+  const rand = new Mesh(new CylinderGeometry(0.36, 0.4, 0.05, 6), new MeshBasicMaterial({ color: 0x141217 }));
+  rand.position.y = 0.025;
+  const stein = new Mesh(new CylinderGeometry(0.29, 0.34, 0.2, 6), new MeshStandardMaterial({ color: 0x9d928d, roughness: 0.9, flatShading: true }));
+  stein.position.y = 0.1; stein.castShadow = true; stein.receiveShadow = true;
+  const kappe = new Mesh(new CylinderGeometry(0.2, 0.27, 0.06, 6), new MeshStandardMaterial({ color: 0xb4a9a4, roughness: 0.85, flatShading: true }));
+  kappe.position.y = 0.22; kappe.castShadow = true;
+  g.add(rand, stein, kappe);
+  return g;
+}
+
 function aufraeumen() {
   if (gfx) {
     scene.remove(gfx);
@@ -136,12 +149,14 @@ function laden(n) {
   lv = levelFuer(n);
   aufraeumen();
   slotXZ.length = 0;
+  sperr = new Set(lv.sperr || []);
   const { cols, rows } = lv;
   for (let i = 0; i < cols * rows; i++) slotXZ.push({ x: (i % cols) - (cols - 1) / 2, z: ((i / cols) | 0) - (rows - 1) / 2 });
   // leere Mulden
   const muldeMat = new MeshBasicMaterial({ color: 0xe2cfc4 });
   const muldeGeo = new CircleGeometry(0.4, 40);
   for (let i = 0; i < cols * rows; i++) {
+    if (sperr.has(i)) { const st = baueStein(); st.position.set(slotXZ[i].x, 0, slotXZ[i].z); gfx.add(st); continue; }
     const m = new Mesh(muldeGeo, muldeMat);
     m.rotation.x = -Math.PI / 2; m.position.set(slotXZ[i].x, 0.004, slotXZ[i].z);
     gfx.add(m);
@@ -151,12 +166,16 @@ function laden(n) {
   ziel.rotation.x = -Math.PI / 2; ziel.position.y = 0.012; ziel.visible = false;
   gfx.add(ziel);
   gfx.userData.ziel = ziel;
+  const reich = new Mesh(new RingGeometry(0.97, 1, 96), new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 }));
+  reich.rotation.x = -Math.PI / 2; reich.position.y = 0.014; reich.visible = false;
+  gfx.add(reich);
+  gfx.userData.reich = reich;
 
   // Seile und Pflöcke
   const farbOffset = (n * 3) % PALETTE.length;
   ropes = lv.ropes.map((r, k) => {
     const farbe = PALETTE[(k + farbOffset) % PALETTE.length];
-    const rope = { k, farbe, ends: [], start: [r.a, r.b] };
+    const rope = { k, farbe, ends: [], start: [r.a, r.b], max: r.max || null, klemme: null };
     for (let e = 0; e < 2; e++) {
       const fest = e === 0 && r.ank;
       const slot = e === 0 ? r.a : r.b;
@@ -173,6 +192,10 @@ function laden(n) {
     mesh.frustumCulled = false; kontur.frustumCulled = false;
     gfx.add(mesh, kontur);
     rope.mesh = mesh; rope.kontur = kontur;
+    if (rope.max) {
+      const kl = new Mesh(new CylinderGeometry(R + 0.03, R + 0.03, 0.15, 20), new MeshStandardMaterial({ color: 0xdfe3ea, metalness: 0.75, roughness: 0.28 }));
+      kl.castShadow = true; gfx.add(kl); rope.klemme = kl;
+    }
     return rope;
   });
   alle = ropes.flatMap(r => r.ends);
@@ -314,8 +337,19 @@ function baueSeile() {
         h[i] = Math.max(h[i], R + (peak - R) * w);
       }
     }
+    // Knicke glätten (sonst stören kleine Kerben an der Kontur)
+    for (let pass = 0; pass < 4; pass++) {
+      let vor = h[0];
+      for (let i = 1; i < N; i++) { const jetzt = h[i]; h[i] = (vor + 2 * jetzt + h[i + 1]) * 0.25; vor = jetzt; }
+    }
     H[k] = h;
     fuelleSeil(rope.mesh.geometry, A.px, A.pz, dx, dz, h, Math.max(1, len / 0.34));
+    if (rope.klemme) {
+      const m = N >> 1, tx = dx / N * 2, ty = h[m + 1] - h[m - 1], tz = dz / N * 2, tl = Math.hypot(tx, ty, tz) || 1;
+      rope.klemme.position.set(A.px + dx * 0.5, h[m], A.pz + dz * 0.5);
+      rope.klemme.quaternion.setFromUnitVectors(UP, new Vector3(tx / tl, ty / tl, tz / tl));
+      rope.klemme.visible = len > 0.55;
+    }
   }
 }
 
@@ -327,7 +361,11 @@ function bodenPunkt(ev) {
   ray.setFromCamera(ndc, camera);
   return ray.ray.intersectPlane(ebene, treffer) ? { x: treffer.x, z: treffer.z } : null;
 }
-function belegt(slot, ausser) { return alle.some(e => e !== ausser && e.slot === slot); }
+function belegt(slot, ausser) { return sperr.has(slot) || alle.some(e => e !== ausser && e.slot === slot); }
+function erreichbar(rope, e, slot) {
+  if (!rope.max) return true;
+  return reichtBis(lv.cols, { a: rope.ends[0].slot, b: rope.ends[1].slot, max: rope.max }, rope.ends.indexOf(e) === 0 ? 'a' : 'b', slot);
+}
 
 canvas.addEventListener('pointerdown', ev => {
   if (gewonnen || drag) return;
@@ -346,6 +384,13 @@ canvas.addEventListener('pointerdown', ev => {
   const touch = ev.pointerType === 'touch' || ev.pointerType === 'pen';
   drag = { rope: best.rope, e: best.e, id: ev.pointerId, von: best.e.slot, ziel: best.e.slot, off: touch ? -0.62 : 0, grab: { x: best.e.px - p.x, z: best.e.pz - p.z } };
   best.e.tl = 1;
+  tipp.hidden = true; tipp2.hidden = true;
+  const rg = gfx.userData.reich;
+  if (best.rope.max) {
+    const anderes = best.rope.ends[best.rope.ends[0] === best.e ? 1 : 0], q = slotPos(anderes.slot);
+    rg.position.x = q.x; rg.position.z = q.z; rg.scale.setScalar(best.rope.max); rg.visible = true;
+    drag.mitte = { x: q.x, z: q.z };
+  }
   // Seil kommt nach oben
   order = order.filter(k => k !== best.rope.k); order.push(best.rope.k);
   ton.nimm();
@@ -356,10 +401,14 @@ canvas.addEventListener('pointermove', ev => {
   const p = bodenPunkt(ev);
   if (!p) return;
   drag.x = p.x; drag.z = p.z + drag.off;
+  if (drag.mitte) {   // begrenztes Seil: der Pflock kommt nicht weiter als das Seil reicht
+    const vx = drag.x - drag.mitte.x, vz = drag.z - drag.mitte.z, l = Math.hypot(vx, vz), m = drag.rope.max;
+    if (l > m) { drag.x = drag.mitte.x + vx / l * m; drag.z = drag.mitte.z + vz / l * m; }
+  }
   // nächster freier Pflock
   let best = drag.von, bd = 0.85;
   for (let i = 0; i < slotXZ.length; i++) {
-    if (belegt(i, drag.e)) continue;
+    if (belegt(i, drag.e) || !erreichbar(drag.rope, drag.e, i)) continue;
     const d = Math.hypot(drag.x - slotXZ[i].x, drag.z - slotXZ[i].z);
     if (d < bd) { bd = d; best = i; }
   }
@@ -370,9 +419,10 @@ function loslassen(ev) {
   if (!drag || (ev && ev.pointerId !== drag.id)) return;
   const d = drag; drag = null;
   d.e.tl = 0;
+  gfx.userData.reich.visible = false;
   const ziel = d.ziel;
   if (ziel !== d.von && !belegt(ziel, d.e)) {
-    d.e.slot = ziel; zuege++;
+    d.e.slot = ziel; zuege++; merkmaleGesehen();
     rueck.push({ k: d.rope.k, ende: d.rope.ends.indexOf(d.e), von: d.von });
     ton.setze();
     pruefeSieg();
@@ -402,16 +452,36 @@ function pruefeSieg() {
 }
 
 // ---------- Oberfläche ----------
+const HINWEIS = {
+  anker: 'Schwarze Anker sitzen fest: Nur das farbige Ende lässt sich verschieben.',
+  kurz: 'Seile mit Metallklemme sind kurz: Beim Halten zeigt ein Ring, wie weit sie reichen.',
+  sperr: 'Graue Steine sperren ein Feld: Dort kann kein Pflock hin.',
+};
+function merkmale() {
+  const m = [];
+  if (lv.ropes.some(r => r.ank)) m.push('anker');
+  if (lv.ropes.some(r => r.max)) m.push('kurz');
+  if (lv.sperr && lv.sperr.length) m.push('sperr');
+  return m;
+}
 function ui() {
   hudLevel.textContent = 'Level ' + num;
   hudZuege.textContent = zuege === 1 ? '1 Zug' : zuege + ' Züge';
   btnZurueck.disabled = rueck.length === 0 || gewonnen;
   btnNeu.disabled = gewonnen;
-  tipp.hidden = !(num <= 2 && zuege === 0 && !gewonnen);
+  const still = zuege === 0 && !gewonnen;
+  tipp.hidden = !(num <= 2 && still);
   tipp.textContent = num === 1
     ? 'Zieh ein Seilende auf einen freien Punkt, bis sich keine Seile mehr kreuzen.'
     : 'Verschiebe die Seilenden, bis nichts mehr übereinanderliegt.';
-  $('hinweisAnker').hidden = !(num === 3 && zuege === 0 && !gewonnen);
+  const neu = still ? merkmale().filter(m => !save.gesehen[m]) : [];
+  tipp2.hidden = neu.length === 0;
+  tipp2.textContent = neu.map(m => HINWEIS[m]).join(' ');
+}
+function merkmaleGesehen() {
+  let neu = false;
+  for (const m of merkmale()) if (!save.gesehen[m]) { save.gesehen[m] = true; neu = true; }
+  if (neu) speichern();
 }
 btnZurueck.addEventListener('click', () => {
   if (gewonnen || drag || !rueck.length) return;
@@ -421,7 +491,25 @@ btnZurueck.addEventListener('click', () => {
 });
 btnNeu.addEventListener('click', () => { if (!gewonnen) { ton.klick(); setzeAufStart(); } });
 $('weiter').addEventListener('click', () => { ton.klick(); laden(num + 1); });
-$('lvl').addEventListener('click', () => { /* Platz für die Levelauswahl */ });
+const wahl = $('wahl'), raster = $('wahlraster');
+function wahlOeffnen() {
+  if (drag) return;
+  ton.klick();
+  raster.textContent = '';
+  const max = Math.min(Math.max(save.level, num), 999);
+  for (let n = 1; n <= max; n++) {
+    const b = document.createElement('button');
+    b.className = 'nr' + (n === num ? ' jetzt' : n < save.level ? ' fertig' : '');
+    b.textContent = n;
+    b.addEventListener('click', () => { wahl.hidden = true; if (n !== num) { ton.klick(); laden(n); } });
+    raster.appendChild(b);
+  }
+  wahl.hidden = false;
+  const j = raster.querySelector('.jetzt'); if (j && j.scrollIntoView) j.scrollIntoView({ block: 'center' });
+}
+$('lvlpille').addEventListener('click', wahlOeffnen);
+$('wahlzu').addEventListener('click', () => { wahl.hidden = true; });
+wahl.addEventListener('click', e => { if (e.target === wahl) wahl.hidden = true; });
 
 // ---------- Schleife ----------
 let letzte = performance.now();
@@ -465,6 +553,8 @@ window.__sa = {
   screen: slot => { const p = slotPos(slot); const v = new Vector3(p.x, 0.1, p.z).project(camera); return { x: (v.x + 1) / 2 * window.innerWidth, y: (1 - v.y) / 2 * window.innerHeight }; },
   laden: n => laden(n),
   slots: () => slotXZ.length,
+  limited: () => ropes.map((r, i) => ({ i, max: r.max, a: r.ends[0].slot, b: r.ends[1].slot, fest: r.ends[0].fest })).filter(r => r.max),
+  sperr: () => Array.from(sperr),
 };
 
 laden(Math.max(1, Math.min(save.level || 1, 9999)));

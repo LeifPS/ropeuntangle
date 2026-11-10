@@ -1,5 +1,7 @@
 // Reine Spiellogik (ohne Grafik): Raster, Kreuzungen, Level-Erzeugung.
-// Ein Level: { cols, rows, ropes: [{ a, b, ank }] }  (a, b = Pflock-Nummern im Raster, zeilenweise; ank = Ende "a" ist fest auf einem schwarzen Anker)
+// Ein Level: { cols, rows, ropes: [{ a, b, ank, max }], sperr: [..] }
+// a, b = Pflock-Nummern im Raster (zeilenweise); ank = Ende "a" sitzt fest auf einem schwarzen Anker;
+// max = größte Länge des Seils in Pflockabständen (fehlt = unbegrenzt); sperr = gesperrte Felder, auf die kein Pflock darf.
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -43,6 +45,12 @@ export function kreuzungen(cols, ropes) {
   }
   return out;
 }
+// Darf Ende `ende` ('a'|'b') von Seil r auf Feld `slot` (Rasterbreite cols)? Prüft nur die Seillänge, nicht die Belegung.
+export function reichtBis(cols, r, ende, slot) {
+  if (r.max === undefined || r.max === null) return true;
+  const o = ende === 'a' ? r.b : r.a;
+  return Math.hypot((o % cols) - (slot % cols), ((o / cols) | 0) - ((slot / cols) | 0)) <= r.max + 1e-6;
+}
 function zaehle(cols, ropes) { return kreuzungen(cols, ropes).length; }
 
 // ---------- Erzeugung ----------
@@ -78,17 +86,34 @@ export function erzeuge(cfg, seed) {
     const ropes = lay.map(r => ({ a: r.a, b: r.b, ank: false }));
     for (let i = 0; i < Math.min(cfg.anchors || 0, ropes.length); i++) ropes[idx[i]].ank = true;
     const loes = ropes.map(r => ({ a: r.a, b: r.b }));
+    // Seillängen: einige Seile reichen nur so weit, wie sie in der Lösung gebraucht werden (plus etwas Luft)
+    const nKurz = Math.min(ropes.length, Math.round((cfg.kurz || 0) * ropes.length) + ((cfg.kurz || 0) > 0 ? 1 : 0));
+    const idx2 = ropes.map((_, i) => i);
+    for (let i = idx2.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [idx2[i], idx2[j]] = [idx2[j], idx2[i]]; }
+    for (let i = 0; i < nKurz; i++) {
+      const r = ropes[idx2[i]], l = Math.hypot((r.a % cols) - (r.b % cols), ((r.a / cols) | 0) - ((r.b / cols) | 0));
+      r.max = Math.round((l + 0.05 + R() * 0.5) * 100) / 100;
+    }
     // durcheinanderbringen: zufällige Züge, die Kreuzungen eher mehr werden lassen
     const belegt = new Uint8Array(n);
     for (const r of ropes) { belegt[r.a] = 1; belegt[r.b] = 1; }
+    // gesperrte Felder aus den freien auswählen (mindestens cfg.leerMin bleiben übrig)
+    const sperr = [];
+    if (cfg.gesperrt) {
+      const freie = []; for (let i = 0; i < n; i++) if (!belegt[i]) freie.push(i);
+      for (let i = freie.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [freie[i], freie[j]] = [freie[j], freie[i]]; }
+      const anz = Math.max(0, Math.min(cfg.gesperrt, freie.length - (cfg.leerMin || 3)));
+      for (let i = 0; i < anz; i++) { sperr.push(freie[i]); belegt[freie[i]] = 1; }
+      sperr.sort((x, y) => x - y);
+    }
     const ziel = Math.max(2, Math.round(ropes.length * (cfg.wirr || 1.2)));
     let jetzt = 0, bewegt = 0;
-    for (let it = 0; it < 6000; it++) {
+    for (let it = 0; it < 9000; it++) {
       if (jetzt >= ziel && bewegt >= ropes.length * 2) break;
       const k = (R() * ropes.length) | 0, r = ropes[k];
       const ende = r.ank ? 'b' : (R() < 0.5 ? 'a' : 'b');
       const neu = (R() * n) | 0;
-      if (belegt[neu]) continue;
+      if (belegt[neu] || !reichtBis(cols, r, ende, neu)) continue;
       const alt = r[ende];
       r[ende] = neu;
       const z = zaehle(cols, ropes);
@@ -96,7 +121,7 @@ export function erzeuge(cfg, seed) {
       else r[ende] = alt;
     }
     if (jetzt < 1) continue;
-    return { cols, rows, ropes, loes, kreuzungen: jetzt };
+    return { cols, rows, ropes, sperr, loes, kreuzungen: jetzt };
   }
   throw new Error('Level konnte nicht erzeugt werden');
 }
@@ -105,10 +130,12 @@ export function erzeuge(cfg, seed) {
 export function konfig(i) {
   const ropes = Math.min(4 + Math.floor(i * 0.5), 16);
   const leer = Math.max(3, Math.ceil(ropes * 0.55));
-  const bedarf = ropes * 2 + leer;
+  const anchors = i < 4 ? 0 : Math.min(1 + Math.floor((i - 4) / 7), Math.floor(ropes / 3));
+  const kurz = i < 5 ? 0 : Math.min(0.6, 0.12 + (i - 5) * 0.025);          // Anteil der Seile mit begrenzter Länge
+  const gesperrt = i < 12 ? 0 : Math.min(8, 1 + Math.floor((i - 12) / 5)); // gesperrte Felder
+  const bedarf = ropes * 2 + leer + gesperrt;
   let cols = Math.min(6, Math.max(4, Math.ceil(Math.sqrt(bedarf * 0.72))));
   let rows = Math.ceil(bedarf / cols);
   while (rows > 9 && cols < 7) { cols++; rows = Math.ceil(bedarf / cols); }
-  const anchors = i < 4 ? 0 : Math.min(1 + Math.floor((i - 4) / 7), Math.floor(ropes / 3));
-  return { cols, rows, ropes, anchors, maxLen: Math.max(2.3, Math.min(cols, rows) * 0.95 + (i > 10 ? 0.8 : 0)), wirr: 1.1 + Math.min(i, 30) * 0.02 };
+  return { cols, rows, ropes, anchors, kurz, gesperrt, leerMin: Math.max(3, Math.ceil(ropes * 0.4)), maxLen: Math.max(2.3, Math.min(cols, rows) * 0.95 + (i > 10 ? 0.8 : 0)), wirr: 1.1 + Math.min(i, 30) * 0.02 };
 }

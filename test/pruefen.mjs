@@ -1,5 +1,5 @@
 // Prüft: feste Level sind lösbar (Breitensuche), erzeugte Level sind nicht schon gelöst und haben ein gültiges Layout.
-import { kreuzungen } from '../src/logic.js';
+import { kreuzungen, reichtBis } from '../src/logic.js';
 import { FEST, levelFuer } from '../src/levels.js';
 
 function loesbar(lv, grenze = 400000) {
@@ -42,10 +42,13 @@ for (let n = 6; n <= 80; n++) {
   const kl = kreuzungen(lv.cols, lv.loes).length;
   const bel = new Set(); let doppelt = false;
   lv.ropes.forEach(r => { if (bel.has(r.a) || bel.has(r.b)) doppelt = true; bel.add(r.a); bel.add(r.b); });
-  const anker = lv.ropes.filter(r => r.ank).length;
+  const anker = lv.ropes.filter(r => r.ank).length, kurzN = lv.ropes.filter(r => r.max).length;
   const ankerOk = lv.ropes.every((r, i) => !r.ank || r.a === lv.loes[i].a);
-  if (k < 1 || kl !== 0 || doppelt || !ankerOk || lv.cols * lv.rows < lv.ropes.length * 2 + 2) { fehler++; console.log('FEHLER bei Level', n, { k, kl, doppelt, ankerOk }); }
-  if (n % 6 === 0 || n < 12) console.log(`level ${n}: ${lv.cols}x${lv.rows}, ${lv.ropes.length} Seile, ${anker} Anker, ${k} Kreuzungen, ${Date.now() - t0} ms`);
+  // Längen und Sperrfelder: Start und Lösung müssen gültig sein, Lösung darf keine Sperrfelder belegen
+  const laengenOk = lv.ropes.every((r, i) => reichtBis(lv.cols, r, 'a', r.a) && reichtBis(lv.cols, { ...r, a: lv.loes[i].a, b: lv.loes[i].b }, 'a', lv.loes[i].a));
+  const sperrOk = lv.sperr.every(s => !lv.ropes.some(r => r.a === s || r.b === s));
+  if (k < 1 || kl !== 0 || doppelt || !ankerOk || !laengenOk || !sperrOk || lv.cols * lv.rows < lv.ropes.length * 2 + 2) { fehler++; console.log('FEHLER bei Level', n, { k, kl, doppelt, ankerOk }); }
+  if (n % 6 === 0 || n < 12) console.log(`level ${n}: ${lv.cols}x${lv.rows}, ${lv.ropes.length} Seile, ${anker} Anker, ${kurzN} kurze Seile, ${lv.sperr.length} Sperrfelder, ${k} Kreuzungen, ${Date.now() - t0} ms`);
 }
 console.log(fehler ? 'FEHLER: ' + fehler : 'alles ok');
 process.exit(fehler ? 1 : 0);

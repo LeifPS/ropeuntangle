@@ -27,7 +27,7 @@ export function levelFuer(n) {
   let lv;
   if (n <= FEST.length) {
     const f = FEST[n - 1];
-    lv = { cols: f.cols, rows: f.rows, ropes: f.ropes.map(r => ({ a: r.a, b: r.b, ank: !!r.ank })), loes: f.loes || null };
+    lv = { cols: f.cols, rows: f.rows, ropes: f.ropes.map(r => ({ a: r.a, b: r.b, ank: !!r.ank })), sperr: [], loes: f.loes || null };
   } else {
     lv = erzeuge(konfig(n - FEST.length - 1), n);
   }
