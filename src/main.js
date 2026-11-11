@@ -188,7 +188,7 @@ function laden(n) {
       const s0 = 0.001;
       peg.position.set(p.x, 0, p.z); peg.scale.setScalar(s0);
       gfx.add(peg);
-      rope.ends.push({ slot, px: p.x, pz: p.z, lift: 0, tl: 0, fest, peg, scale: s0, ts: 1, shake: 0, verzoegerung: (k * 0.04 + e * 0.02) });
+      rope.ends.push({ k, slot, px: p.x, pz: p.z, lift: 0, tl: 0, fest, peg, scale: s0, ts: 1, shake: 0, verzoegerung: (k * 0.04 + e * 0.02) });
     }
     const mesh = new Mesh(neuesSeilGeo(), seilMaterial(farbe));
     mesh.castShadow = true; mesh.receiveShadow = true;
@@ -326,6 +326,7 @@ function baueSeile() {
       for (let q = 0; q < alle.length; q++) {
         const e = alle[q];
         if (e === A || e === B || e.lift > 0.3) continue;
+        if (lv.schicht[e.k] > lv.schicht[k]) continue;   // Pflock eines höher liegenden Seils: das Seil läuft darunter durch, nicht darüber
         const d = Math.hypot(x - e.px, z - e.pz);
         if (d < 0.66) y = Math.max(y, R + (KNOB_TOP + R + 0.02 - R) * (1 - smooth(0.3, 0.66, d)));
       }
@@ -336,6 +337,7 @@ function baueSeile() {
       const j = reihenfolge[oj], o = ropes[j];
       const hit = schnitt(A, B, o.ends[0], o.ends[1]);
       if (!hit) continue;
+      if (hit.t * len < 0.1 || (1 - hit.t) * len < 0.1) continue;   // läuft genau durch den Pflock dieses Seils: Ende bleibt im Pflock
       const hj = H[j], fi = hit.u * N, i0 = Math.floor(fi), i1 = Math.min(N, i0 + 1), fr = fi - i0;
       const hOben = hj[i0] * (1 - fr) + hj[i1] * fr;
       const peak = hOben + 2 * R + 0.03;
